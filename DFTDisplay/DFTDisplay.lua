@@ -5,6 +5,8 @@ local LibDeflate = LibStub:GetLibrary("LibDeflate")
 
 local dftdisplay_sync = "DFTDisplaySync"
 
+local GetNumGroupMembers, GetRaidRosterInfo, UnitInRaid = GetNumGroupMembers, GetRaidRosterInfo, UnitInRaid
+
 DFTDisplay_Priolist = {}
 DFTDisplay_Checkboxes = {}
 
@@ -29,68 +31,71 @@ function DFTDisplay:START_LOOT_ROLL(_, rollID, rollTime, lootHandle)
     local itemLink = GetLootRollItemLink(rollID)
     local itemID = getIdFromItemlink(itemLink)
 
-    local frame = AceGUI:Create("Frame")
-    self:Print(itemLink)
-    DFTDisplay_Checkboxes[itemID] = {}
-    --frame:SetStatusText(colorText("You are allowed to roll!", "GREEN"))
-    frame:SetCallback("OnClose", function(widget)
-        AceGUI:Release(widget)
-        DFTDisplay_Checkboxes[itemID] = nil
-    end)
-    frame:SetLayout("Fill")
-    frame:SetWidth(275)
-    frame:SetHeight(300)
-    frame:SetTitle(colorText("You are allowed to roll!", "GREEN"))
-    local scroll = AceGUI:Create("ScrollFrame")
-    scroll:SetLayout("Flow")
-    scroll:SetPoint("CENTER")
-    frame:AddChild(scroll)
-    local itemLink_label = AceGUI:Create("InteractiveLabel")
-    itemLink_label:SetText(itemLink)
+    if DFTDisplay_Priolist[itemID] then
+        local frame = AceGUI:Create("Frame")
+        self:Print(itemLink)
+        DFTDisplay_Checkboxes[itemID] = {}
+        --frame:SetStatusText(colorText("You are allowed to roll!", "GREEN"))
+        frame:SetCallback("OnClose", function(widget)
+            AceGUI:Release(widget)
+            DFTDisplay_Checkboxes[itemID] = nil
+        end)
+        frame:SetLayout("Fill")
+        frame:SetWidth(275)
+        frame:SetHeight(300)
+        frame:SetTitle(colorText("You are allowed to roll!", "GREEN"))
+        local scroll = AceGUI:Create("ScrollFrame")
+        scroll:SetLayout("Flow")
+        scroll:SetPoint("CENTER")
+        frame:AddChild(scroll)
+        local itemLink_label = AceGUI:Create("InteractiveLabel")
+        itemLink_label:SetText(itemLink)
 
-    itemLink_label:SetCallback("OnEnter", function(widget)
-        if (itemLink) then
-            GameTooltip:SetOwner(itemLink_label.frame, "ANCHOR_TOP")
-            GameTooltip:SetHyperlink(itemLink)
-            GameTooltip:Show()
+        itemLink_label:SetCallback("OnEnter", function(widget)
+            if (itemLink) then
+                GameTooltip:SetOwner(itemLink_label.frame, "ANCHOR_TOP")
+                GameTooltip:SetHyperlink(itemLink)
+                GameTooltip:Show()
+            end
+        end)
+        itemLink_label:SetCallback("OnLeave", function()
+            GameTooltip:Hide()
+        end)
+        scroll:AddChild(itemLink_label)
+
+        for prio_number, player_table in spairs(DFTDisplay_Priolist[itemID]) do
+            --self:Print(prio_number)
+            local prio_number_highlight = AceGUI:Create("Heading")
+            prio_number_highlight:SetText(tostring(prio_number))
+            prio_number_highlight:SetRelativeWidth(1)
+            scroll:AddChild(prio_number_highlight)
+            for i, player_name in ipairs(player_table) do
+                --self:Print(player_name)
+                local player_name_unclolored = string.sub(player_name, 11, -3)
+                if UnitInRaid(player_name_unclolored) then
+                    local player_name_label = AceGUI:Create("Label")
+                    player_name_label:SetWidth(75)
+                    player_name_label:SetPoint("TOP")
+                    player_name_label:SetPoint("BOTTOM")
+                    player_name_label:SetJustifyH("CENTER")
+                    player_name_label:SetText(player_name)
+                    scroll:AddChild(player_name_label)
+                    local player_name_cb = AceGUI:Create("DFTDisplayCheckBox")
+                    player_name_cb:SetTriState(true)
+                    player_name_cb:SetWidth(25)
+                    player_name_cb:SetDisabled(true)
+
+                    player_name_cb:SetCallback("OnValueChanged", function(value)
+                        DevTools_Dump(value:GetValue())
+                    end)
+                    DFTDisplay_Checkboxes[itemID][player_name_unclolored] = player_name_cb
+                    scroll:AddChild(player_name_cb)
+                end
+            end
+            --self:Print(k, tostring(v))
         end
-    end)
-    itemLink_label:SetCallback("OnLeave", function()
-        GameTooltip:Hide()
-    end)
-    scroll:AddChild(itemLink_label)
-
-    for prio_number, player_table in spairs(DFTDisplay_Priolist[itemID]) do
-        --self:Print(prio_number)
-        local prio_number_highlight = AceGUI:Create("Heading")
-        prio_number_highlight:SetText(tostring(prio_number))
-        prio_number_highlight:SetRelativeWidth(1)
-        scroll:AddChild(prio_number_highlight)
-        for i, player_name in ipairs(player_table) do
-            --self:Print(player_name)
-            local player_name_label = AceGUI:Create("Label")
-            player_name_label:SetWidth(75)
-            player_name_label:SetPoint("TOP")
-            player_name_label:SetPoint("BOTTOM")
-            player_name_label:SetJustifyH("CENTER")
-            player_name_label:SetText(player_name)
-            scroll:AddChild(player_name_label)
-            local player_name_cb = AceGUI:Create("DFTDisplayCheckBox")
-            player_name_cb:SetTriState(true)
-            player_name_cb:SetWidth(25)
-            player_name_cb:SetDisabled(true)
-
-            player_name_cb:SetCallback("OnValueChanged", function(value)
-                DevTools_Dump(value:GetValue())
-            end)
-            local player_name_unclolored = string.sub(player_name, 11, -3)
-            DFTDisplay_Checkboxes[itemID][player_name_unclolored] = player_name_cb
-            scroll:AddChild(player_name_cb)
-        end
-        --self:Print(k, tostring(v))
+        --DFTDisplay:debug(DFTDisplay_Checkboxes)
     end
-    --DFTDisplay:debug(DFTDisplay_Checkboxes)
-
 end
 
 function DFTDisplay:LOOT_ITEM_AVAILABLE(_, itemTooltip, lootHandle)
@@ -336,4 +341,8 @@ function DFTDisplay:debug(...)
             or strfind(debugstack(1), "n.`Use%uction.+ML\\%uec%l")) then
         return true;
     end
+end
+
+function DFTDisplay:GetNumGroupMembers()
+    return IsInGroup() and GetNumGroupMembers() or 1
 end
