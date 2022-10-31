@@ -1,7 +1,9 @@
 DFTDisplay = LibStub("AceAddon-3.0"):NewAddon("DFTDisplay", "AceConsole-3.0", "AceEvent-3.0", "AceComm-3.0", "AceSerializer-3.0")
 local AceGUI = LibStub("AceGUI-3.0")
+--LoadAddOn("LibCompress")
+local LibDeflate = LibStub:GetLibrary("LibDeflate")
 
-local dftdisplay_sync = "DFTDisplay_sync"
+local dftdisplay_sync = "DFTDisplaySync"
 
 DFTDisplay_Priolist = {}
 DFTDisplay_Checkboxes = {}
@@ -9,7 +11,6 @@ DFTDisplay_Checkboxes = {}
 function DFTDisplay:OnInitialize()
     -- Called when the addon is loaded
     self:Print("DFT Display Initialized")
-    --self.db = LibStub("AceDB-3.0"):New("DFTDisplay")
     self:RegisterChatCommand("dftdisplay", "SlashCommand")
     self:RegisterComm(dftdisplay_sync)
 
@@ -88,7 +89,7 @@ function DFTDisplay:START_LOOT_ROLL(_, rollID, rollTime, lootHandle)
         end
         --self:Print(k, tostring(v))
     end
-    --debug(DFTDisplay_Checkboxes)
+    --DFTDisplay:debug(DFTDisplay_Checkboxes)
 
 end
 
@@ -123,20 +124,30 @@ function DFTDisplay:OnDisable()
 end
 
 function DFTDisplay:OnCommReceived(prefix, message, distribution, sender)
-    local success, data = self:Deserialize(message)
-    if success then
-        DFTDisplay_Priolist = data
-    else
-        self:Print("Error while receiving DFTDisplay Prios")
+    SendChatMessage("Getting Prio update from " .. sender, "RAID")
+    self:Print("Received message on " .. prefix .. " from " .. sender)
+    if prefix == dftdisplay_sync then
+        local decoded = LibDeflate:DecodeForWoWAddonChannel(message);
+        local decompressed = LibDeflate:DecompressDeflate(decoded);
+        if decompressed then
+            local success, data = self:Deserialize(decompressed)
+            if success then
+                DFTDisplay_Priolist = data
+                self:Print("Updated DFTDisplay Priolist")
+            else
+                self:Print("Error while deserializing DFTDisplay Prios")
+            end
+        else
+            self:Print("Error while decompressing DFTDisplay Prios")
+        end
     end
-
 end
 
 function DFTDisplay:SlashCommand(msg)
     if msg == "pass" then
         --local name, rollType = "Designflawz", 0
         self:Print("PASSED")
-        debug(DFTDisplay_Checkboxes)
+        DFTDisplay:debug(DFTDisplay_Checkboxes)
         if DFTDisplay_Checkboxes[40403] then
             self:Print("Found ID")
             if DFTDisplay_Checkboxes[40403]["Designflawz"] then
@@ -211,7 +222,7 @@ function DFTDisplay:SlashCommand(msg)
             end
             --self:Print(k, tostring(v))
         end
-        debug(DFTDisplay_Checkboxes)
+        DFTDisplay:debug(DFTDisplay_Checkboxes)
 
     end
     if msg == "sync" then
@@ -246,6 +257,26 @@ function DFTDisplay:SlashCommand(msg)
                     DFTDisplay_Priolist[tonumber(itemID)] = prios
                 end
             end
+        end
+        local serializedData = self:Serialize(DFTDisplay_Priolist)
+        if serializedData then
+            local compressed = LibDeflate:CompressDeflate(serializedData, { level = 9 })
+            if compressed then
+                local packet = LibDeflate:EncodeForWoWAddonChannel(compressed)
+                if packet then
+                    --self:Print(packet)
+                    SendChatMessage("Sending DFTDisplay Prio Update to Raid!", "RAID")
+                    DFTDisplay:SendCommMessage(dftdisplay_sync, packet, "GUILD", "", "NORMAL", function(_, done, total)
+                        self:Print(done .. " " .. total);
+                    end)
+                else
+                    self:Print("Error while Encoding DFTDisplay Prios")
+                end
+            else
+                self:Print("Error while compressing DFTDisplay Prios")
+            end
+        else
+            self:Print("Error while serializing DFTDisplay Prios")
         end
     end
 end
@@ -290,7 +321,7 @@ function getIdFromItemlink(itemLink)
     return tonumber(select(3, strfind(itemLink, "item:(%d+)")))
 end
 
-function debug(...)
+function DFTDisplay:debug(...)
     local data = ...;
     if (data) then
         if (type(data) == "table") then
