@@ -5,7 +5,7 @@ local LibDeflate = LibStub:GetLibrary("LibDeflate")
 
 local dftdisplay_sync = "DFTDisplaySync"
 
-local GetNumGroupMembers, GetRaidRosterInfo, UnitInRaid = GetNumGroupMembers, GetRaidRosterInfo, UnitInRaid
+local GetNumGroupMembers, GetRaidRosterInfo, UnitInRaid, RollOnLoot = GetNumGroupMembers, GetRaidRosterInfo, UnitInRaid, RollOnLoot
 
 DFTDisplay_Priolist = {}
 DFTDisplay_Checkboxes = {}
@@ -22,7 +22,6 @@ function DFTDisplay:OnEnable()
     -- Called when the addon is enabled
     self:Print("DFT Display Enabled")
     self:RegisterEvent("START_LOOT_ROLL")
-    self:RegisterEvent("LOOT_ITEM_AVAILABLE")
     self:RegisterEvent("LOOT_HISTORY_ROLL_CHANGED")
 end
 
@@ -43,7 +42,7 @@ function DFTDisplay:START_LOOT_ROLL(_, rollID, rollTime, lootHandle)
         frame:SetLayout("Fill")
         frame:SetWidth(275)
         frame:SetHeight(300)
-        frame:SetTitle(colorText("You are allowed to roll!", "GREEN"))
+        frame:SetTitle(colorText("Check Prios!!", "RED"))
         local scroll = AceGUI:Create("ScrollFrame")
         scroll:SetLayout("Flow")
         scroll:SetPoint("CENTER")
@@ -96,11 +95,25 @@ function DFTDisplay:START_LOOT_ROLL(_, rollID, rollTime, lootHandle)
         end
         --DFTDisplay:debug(DFTDisplay_Checkboxes)
     end
+    if DFTDisplay_Priolist[itemID] == 0 then
+        local frame = AceGUI:Create("Frame")
+        self:Print(itemLink)
+        DFTDisplay_Checkboxes[itemID] = {}
+        --frame:SetStatusText(colorText("You are allowed to roll!", "GREEN"))
+        frame:SetCallback("OnClose", function(widget)
+            AceGUI:Release(widget)
+            DFTDisplay_Checkboxes[itemID] = nil
+        end)
+        frame:SetLayout("Fill")
+        frame:SetWidth(275)
+        frame:SetHeight(100)
+        frame:SetTitle(colorText("Free for all!!!", "GREEN"))
+    end
 end
 
-function DFTDisplay:LOOT_ITEM_AVAILABLE(_, itemTooltip, lootHandle)
-    self:Print(itemTooltip, lootHandle)
-end
+--function DFTDisplay:LOOT_ITEM_AVAILABLE(_, itemTooltip, lootHandle)
+--    --self:Print(itemTooltip, lootHandle)
+--end
 
 function DFTDisplay:LOOT_HISTORY_ROLL_CHANGED(_, itemIdx, playerIdx)
     local rollID = C_LootHistory.GetItem(itemIdx)
@@ -108,7 +121,7 @@ function DFTDisplay:LOOT_HISTORY_ROLL_CHANGED(_, itemIdx, playerIdx)
     local name, class, rollType = C_LootHistory.GetPlayerInfo(itemIdx, playerIdx)
     local itemID = getIdFromItemlink(link)
     if DFTDisplay_Checkboxes[itemID] then
-        self:Print("Found ID")
+        self:Print("Found ID" .. itemID)
         if DFTDisplay_Checkboxes[itemID][name] then
             self:Print("Found Checkbox")
             if rollType == 1 then
@@ -260,30 +273,33 @@ function DFTDisplay:SlashCommand(msg)
                     end
                     --self:Print(itemID, value)
                     DFTDisplay_Priolist[tonumber(itemID)] = prios
+                else
+                    DFTDisplay_Priolist[tonumber(itemID)] = 0
                 end
             end
-        end
-        local serializedData = self:Serialize(DFTDisplay_Priolist)
-        if serializedData then
-            local compressed = LibDeflate:CompressDeflate(serializedData, { level = 9 })
-            if compressed then
-                local packet = LibDeflate:EncodeForWoWAddonChannel(compressed)
-                if packet then
-                    --self:Print(packet)
-                    SendChatMessage("Sending DFTDisplay Prio Update to Raid!", "RAID")
-                    DFTDisplay:SendCommMessage(dftdisplay_sync, packet, "GUILD", "", "NORMAL", function(_, done, total)
-                        self:Print(done .. " " .. total);
-                    end)
+            local serializedData = self:Serialize(DFTDisplay_Priolist)
+            if serializedData then
+                local compressed = LibDeflate:CompressDeflate(serializedData, { level = 9 })
+                if compressed then
+                    local packet = LibDeflate:EncodeForWoWAddonChannel(compressed)
+                    if packet then
+                        --self:Print(packet)
+                        SendChatMessage("Sending DFTDisplay Prio Update to Raid!", "RAID")
+                        DFTDisplay:SendCommMessage(dftdisplay_sync, packet, "GUILD", "", "NORMAL", function(_, done, total)
+                            self:Print(done .. " " .. total);
+                        end)
+                    else
+                        self:Print("Error while Encoding DFTDisplay Prios")
+                    end
                 else
-                    self:Print("Error while Encoding DFTDisplay Prios")
+                    self:Print("Error while compressing DFTDisplay Prios")
                 end
             else
-                self:Print("Error while compressing DFTDisplay Prios")
+                self:Print("Error while serializing DFTDisplay Prios")
             end
-        else
-            self:Print("Error while serializing DFTDisplay Prios")
         end
     end
+
 end
 
 function spairs(t)
